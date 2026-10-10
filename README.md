@@ -70,8 +70,7 @@ Without the actions you can still play from Filter › Plug-ins › Doom…, cho
 | Weapons | Alt+Shift+1 … 5 |
 | New game | Alt+Shift+N |
 
-The keys work in PhotoCraft versions that bind keys to actions, which came after PhotoCraft
-0.5.0. In 0.5.0, double-click the moves in the Actions panel instead.
+The keys work in PhotoCraft versions that bind keys to actions, which if ever comes, double-click the moves in the Actions panel instead.
 
 **Filter › Plug-ins › Doom…** plays any move for a chosen number of tics, and starts games at
 other skills or maps:
