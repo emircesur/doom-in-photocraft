@@ -1,0 +1,120 @@
+# Builds the plug-in, plays a few moves with the latest PhotoCraft, tests the install scripts,
+# and publishes a release when a v* tag is pushed.
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q clang lld
+      - name: Build
+        run: ./package.sh dist
+      - name: Plays in PhotoCraft
+        run: |
+          url=$(curl -fsSL https://api.github.com/repos/storytold/photocraft/releases/latest \
+            | python3 -c "import json,sys;print(next(a['browser_download_url'] for a in json.load(sys.stdin)['assets'] if a['name'].endswith('linux-x86_64.tar.gz')))")
+          mkdir -p pc && curl -fsSL "$url" | tar -xz -C pc
+          cli=$(find pc -name photocraft-cli -type f | head -1)
+          run=(--cmd plugin.install --params '{"path":"dist/doom-photocraft.wasm"}')
+          for m in Forward Forward "Turn left" Fire Use; do
+            run+=(--cmd plugin.run --params "{\"id\":\"org.craftspace.doom\",\"params\":{\"move\":\"$m\",\"tics\":6}}")
+          done
+          "$cli" run --new '{"width":640,"height":400,"mode":"rgb","depth":8}' "${run[@]}" --out dist/frame.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: |
+            dist/*.zip
+            dist/*.wasm
+            dist/*.json
+            dist/SHA256SUMS.txt
+            dist/frame.png
+
+  install:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Install and remove (Linux, macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cfg="$RUNNER_TEMP/photocraft"
+          mkdir -p "$cfg"
+          echo '{"shortcuts":{"edit.example":"Alt+Shift+F"}}' > "$cfg/preferences.json"
+          sh install.sh --config "$cfg" --from dist
+          python3 - "$cfg" <<'PY'
+          import json, os, sys
+          cfg = sys.argv[1]
+          p = json.load(open(f"{cfg}/preferences.json"))
+          a = json.load(open(f"{cfg}/Presets/actions.json"))
+          assert len([x for x in a["actions"] if x["name"].startswith("Doom: ")]) == 17, a
+          assert p["shortcuts"]["actions.play:Doom: Forward"] == "Alt+Shift+W", p
+          assert "actions.play:Doom: Fire" not in p["shortcuts"], "a key already used was taken"
+          assert os.path.isfile(os.path.join(p["plugIns"]["additionalPluginsFolder"], "doom-photocraft.wasm"))
+          PY
+          sh install.sh --config "$cfg" --uninstall
+          python3 - "$cfg" <<'PY'
+          import json, sys
+          cfg = sys.argv[1]
+          p = json.load(open(f"{cfg}/preferences.json"))
+          a = json.load(open(f"{cfg}/Presets/actions.json"))
+          assert not a["actions"] and p["shortcuts"] == {"edit.example": "Alt+Shift+F"}, (a, p)
+          PY
+      - name: Install and remove (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $cfg = Join-Path $env:RUNNER_TEMP "photocraft"
+          New-Item -ItemType Directory -Force $cfg | Out-Null
+          '{"shortcuts":{"edit.example":"Alt+Shift+F"}}' | Set-Content (Join-Path $cfg "preferences.json")
+          ./install.ps1 -Config $cfg -From dist
+          $p = Get-Content -Raw (Join-Path $cfg "preferences.json") | ConvertFrom-Json
+          $a = Get-Content -Raw (Join-Path $cfg "Presets/actions.json") | ConvertFrom-Json
+          if (@($a.actions).Count -ne 17) { throw "expected 17 actions" }
+          if ($p.shortcuts.'actions.play:Doom: Forward' -ne "Alt+Shift+W") { throw "no key for Forward" }
+          if ($p.shortcuts.PSObject.Properties['actions.play:Doom: Fire']) { throw "a key already used was taken" }
+          if (-not (Test-Path (Join-Path $p.plugIns.additionalPluginsFolder "doom-photocraft.wasm"))) { throw "no plug-in" }
+          ./install.ps1 -Config $cfg -Uninstall
+          $a = Get-Content -Raw (Join-Path $cfg "Presets/actions.json") | ConvertFrom-Json
+          if (@($a.actions).Count -ne 0) { throw "actions left after removing" }
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, install]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "Doom in PhotoCraft ${GITHUB_REF_NAME#v}" \
+            --notes "Install: see the README. Files are checked against SHA256SUMS.txt by the install scripts." \
+            dist/*.zip dist/doom-photocraft.wasm dist/doom-actions.json dist/SHA256SUMS.txt
