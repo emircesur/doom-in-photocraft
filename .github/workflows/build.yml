@@ -1,5 +1,6 @@
 # Builds the plug-in, plays a few moves with the latest PhotoCraft, tests the install scripts,
-# and publishes a release when a v* tag is pushed.
+# and publishes a release when a v* tag is pushed, or when run by hand with "publish" (the
+# release is then tagged v<VERSION from package.sh> at the commit it ran on).
 name: Build
 
 on:
@@ -8,6 +9,11 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish a release (v<version in package.sh>)
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -105,10 +111,11 @@ jobs:
           if (@($a.actions).Count -ne 0) { throw "actions left after removing" }
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
     needs: [build, install]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: dist
@@ -117,6 +124,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "Doom in PhotoCraft ${GITHUB_REF_NAME#v}" \
+          tag="$GITHUB_REF_NAME"
+          case "$tag" in v*) ;; *) tag="v$(sed -n 's/^VERSION=//p' package.sh | tr -d '"')" ;; esac
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Doom in PhotoCraft ${tag#v}" \
             --notes "Install: see the README. Files are checked against SHA256SUMS.txt by the install scripts." \
             dist/*.zip dist/doom-photocraft.wasm dist/doom-actions.json dist/SHA256SUMS.txt
