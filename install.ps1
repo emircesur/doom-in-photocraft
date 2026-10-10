@@ -90,7 +90,7 @@ try {
         Write-Json $prefsPath $prefs
         $note = if ($taken.Count) { " (keys already used, left alone: " + ($taken -join ", ") + ")" } else { "" }
         Write-Host "Installed: the plug-in is in $folder, and $($names.Count) Doom actions are in the Actions panel$note."
-        Write-Host "Start PhotoCraft, make a new 640 x 400 RGB document and press Alt+Shift+W (forward), A/D (turn), F (fire), Space (use)."
+        Write-Host "Start PhotoCraft, make a new 640 x 400 RGB document and double-click a Doom move in Window > Actions (newer PhotoCraft versions also play them with Alt+Shift+W, A, S, D)."
     } else {
         if ($folder) { Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $folder "doom-photocraft.wasm") }
         Set-Prop $list "actions" $kept

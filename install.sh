@@ -68,40 +68,40 @@ fi
 mkdir -p "$config/Presets"
 
 if [ "$os" = Darwin ]; then
-  # macOS: JavaScript for Automation is always there (python3 may not be).
-  osascript -l JavaScript - "$mode" "$config" "$tmp" <<'JXA'
+  # macOS: JavaScript for Automation is always there (python3 may not be). It only edits the two
+  # JSON files and prints the plug-ins folder; the shell moves the plug-in itself.
+  out="$(osascript -l JavaScript - "$mode" "$config" "$tmp" <<'JXA'
 ObjC.import("Foundation");
 function run(argv) {
   var mode = argv[0], config = argv[1], tmp = argv[2];
-  var fm = $.NSFileManager.defaultManager;
   function read(path) {
-    var s = $.NSString.stringWithContentsOfFileEncodingError(path, $.NSUTF8StringEncoding, null);
+    var s = $.NSString.stringWithContentsOfFileEncodingError(path, $.NSUTF8StringEncoding, $());
     return s.isNil() ? null : JSON.parse(ObjC.unwrap(s));
   }
   function write(path, value) {
-    $(JSON.stringify(value, null, 2) + "\n").writeToFileAtomicallyEncodingError(path, true, $.NSUTF8StringEncoding, null);
+    var ok = $(JSON.stringify(value, null, 2) + "\n").writeToFileAtomicallyEncodingError(path, true, $.NSUTF8StringEncoding, $());
+    if (!ok) throw new Error("can't write " + path);
   }
   var prefsPath = config + "/preferences.json", actionsPath = config + "/Presets/actions.json";
   var prefs = read(prefsPath) || {};
   var list = read(actionsPath) || { version: 1, actions: [] };
-  var add = mode === "install" ? read(tmp + "/doom-actions.json") : read(actionsPath);
-  var names = (mode === "install" ? add.actions : list.actions)
-    .map(function (a) { return a.name; })
-    .filter(function (n) { return mode === "install" || n.indexOf("Doom: ") === 0; });
+  if (list.version !== 1) throw new Error("PhotoCraft's actions.json is a newer version than this installer knows.");
+  var add = mode === "install" ? read(tmp + "/doom-actions.json") : null;
+  var names = mode === "install"
+    ? add.actions.map(function (a) { return a.name; })
+    : list.actions.map(function (a) { return a.name || ""; }).filter(function (n) { return n.indexOf("Doom: ") === 0; });
   prefs.plugIns = prefs.plugIns || {};
-  var folder = prefs.plugIns.useAdditionalPluginsFolder && prefs.plugIns.additionalPluginsFolder;
+  var folder = (prefs.plugIns.useAdditionalPluginsFolder && prefs.plugIns.additionalPluginsFolder) || "";
   list.actions = list.actions.filter(function (a) { return names.indexOf(a.name) < 0; });
   prefs.shortcuts = prefs.shortcuts || {};
   names.forEach(function (n) { delete prefs.shortcuts["actions.play:" + n]; });
+  var note = "";
   if (mode === "install") {
     if (!folder) {
       folder = config + "/Plug-ins";
       prefs.plugIns.useAdditionalPluginsFolder = true;
       prefs.plugIns.additionalPluginsFolder = folder;
     }
-    fm.createDirectoryAtPathWithIntermediateDirectoriesAttributesError(folder, true, null, null);
-    fm.removeItemAtPathError(folder + "/doom-photocraft.wasm", null);
-    fm.copyItemAtPathToPathError(tmp + "/doom-photocraft.wasm", folder + "/doom-photocraft.wasm", null);
     list.actions = list.actions.concat(add.actions);
     var taken = [];
     Object.keys(add.shortcuts).forEach(function (n) {
@@ -109,17 +109,25 @@ function run(argv) {
       var used = Object.keys(prefs.shortcuts).some(function (k) { return k !== id && prefs.shortcuts[k] === key; });
       if (used) taken.push(key); else prefs.shortcuts[id] = key;
     });
-    write(actionsPath, list);
-    write(prefsPath, prefs);
-    return "Installed: the plug-in is in " + folder + ", and " + add.actions.length + " Doom actions are in the Actions panel" +
-      (taken.length ? " (keys already used, left alone: " + taken.join(", ") + ")" : "") + ".";
+    if (taken.length) note = " (keys already used, left alone: " + taken.join(", ") + ")";
   }
-  if (folder) fm.removeItemAtPathError(folder + "/doom-photocraft.wasm", null);
   write(actionsPath, list);
   write(prefsPath, prefs);
-  return "Removed Doom (" + names.length + " actions).";
+  return folder + "\n" + names.length + "\n" + note;
 }
 JXA
+)"
+  folder="$(printf '%s\n' "$out" | sed -n 1p)"
+  count="$(printf '%s\n' "$out" | sed -n 2p)"
+  note="$(printf '%s\n' "$out" | sed -n 3p)"
+  if [ "$mode" = install ]; then
+    mkdir -p "$folder"
+    cp "$tmp/doom-photocraft.wasm" "$folder/doom-photocraft.wasm"
+    echo "Installed: the plug-in is in $folder, and $count Doom actions are in the Actions panel$note."
+  else
+    [ -n "$folder" ] && rm -f "$folder/doom-photocraft.wasm"
+    echo "Removed Doom ($count actions)."
+  fi
 else
   command -v python3 >/dev/null 2>&1 || { echo "python3 is needed to edit PhotoCraft's settings." >&2; exit 1; }
   python3 - "$mode" "$config" "$tmp" <<'PY'
@@ -191,5 +199,5 @@ PY
 fi
 
 if [ "$mode" = install ]; then
-  echo "Start PhotoCraft, make a new 640 x 400 RGB document and press Alt+Shift+W (forward), A/D (turn), F (fire), Space (use)."
+  echo "Start PhotoCraft, make a new 640 x 400 RGB document and double-click a Doom move in Window > Actions (newer PhotoCraft versions also play them with Alt+Shift+W, A, S, D)."
 fi
