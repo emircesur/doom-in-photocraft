@@ -52,8 +52,8 @@ Without the actions you can still play from Filter › Plug-ins › Doom…, cho
 
 ## Play
 
-1. File › New: **640 × 400** pixels, RGB. 320 × 200 works too; the canvas can be at most
-   1024 × 512.
+1. File › New: **640 × 400** pixels, RGB. On a larger document (a photo, or PhotoCraft's
+   default new document) the game takes the top-left 640 × 400 and leaves the rest alone.
 2. Open **Window › Actions** and double-click a **Doom** move. The first one starts a game.
 3. **Edit › Undo** takes a move back.
 

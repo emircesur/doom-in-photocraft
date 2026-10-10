@@ -8,7 +8,7 @@
 # Needs clang and wasm-ld (any recent LLVM), curl, python3.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VERSION="1.0.0"
+VERSION="1.0.1"
 FREEDOOM_URL="https://github.com/freedoom/freedoom/releases/download/v0.13.0/freedoom-0.13.0.zip"
 FREEDOOM_SHA256="3f9b264f3e3ce503b4fb7f6bdcb1f419d93c7b546f4df3e874dd878db9688f59"
 OUT="$(mkdir -p "$1" && cd "$1" && pwd)"

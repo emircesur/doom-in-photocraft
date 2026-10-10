@@ -40,6 +40,8 @@ jobs:
             run+=(--cmd plugin.run --params "{\"id\":\"org.craftspace.doom\",\"params\":{\"move\":\"$m\",\"tics\":6}}")
           done
           "$cli" run --new '{"width":640,"height":400,"mode":"rgb","depth":8}' "${run[@]}" --out dist/frame.png
+          # A larger document: the game takes its top-left 640 x 400.
+          "$cli" run --new '{"width":1920,"height":1080,"mode":"rgb","depth":8}' "${run[@]}" --out dist/frame-1920.png
       - uses: actions/upload-artifact@v4
         with:
           name: dist

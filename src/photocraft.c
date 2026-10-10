@@ -27,7 +27,7 @@ static const char manifest[] =
     "{\"id\":\"org.craftspace.doom\",\"name\":\"Doom\\u2026\",\"version\":\"1.0.0\",\"kind\":\"filter\","
     "\"author\":\"emircesur\","
     "\"description\":\"Plays Doom (Freedoom: Phase 1) on the canvas, one move per run: use a 640 x 400 RGB document "
-    "and double-click the Doom actions in Window > Actions (or press Alt+Shift+W/A/S/D, Q/E, F, Space where PhotoCraft "
+    "(on a larger one the game takes its top-left 640 x 400) and double-click the Doom actions in Window > Actions (or press Alt+Shift+W/A/S/D, Q/E, F, Space where PhotoCraft "
     "binds keys to actions). Undo takes a move back. The game is kept in the picture.\","
     "\"params\":{"
     "\"move\":{\"type\":\"choice\",\"options\":[\"Forward\",\"Back\",\"Turn left\",\"Turn right\",\"Strafe left\","
@@ -138,9 +138,23 @@ EXPORT(pc_filter) int pc_filter(float *buf, int buf_len, int width, int height, 
     if (mode != 3 || channels < 3)
         return 10; /* not an RGB document */
     long x0 = json_int(params, plen, "x", 0), y0 = json_int(params, plen, "y", 0);
-    long cw = json_int(params, plen, "canvasWidth", width), ch = json_int(params, plen, "canvasHeight", height);
-    if (x0 > 0 || y0 > 0 || x0 + width < cw || y0 + height < ch)
-        return 11; /* the canvas is larger than 1024 x 512: the band doesn't see all of it */
+    long ov = json_int(params, plen, "overlap", 256);
+    long canvas_w = json_int(params, plen, "canvasWidth", width), canvas_h = json_int(params, plen, "canvasHeight", height);
+    /* The game's area: the whole canvas up to 1024 x 512, where every band sees all of it; on a
+     * larger canvas, 640 x 400 at its top left. Bands that touch the area see all of it (they are
+     * 256 rows tall, at least 1024 wide, with 256 pixels around), so they all play the same move;
+     * bands below or right of it leave their pixels as they are. */
+    long cw = canvas_w, ch = canvas_h;
+    if (cw > 1024 || ch > 512) {
+        cw = cw < 640 ? cw : 640;
+        ch = ch < 400 ? ch : 400;
+    }
+    int sees_game = x0 <= 0 && y0 <= 0 && x0 + width >= cw && y0 + height >= ch;
+    if (!sees_game) {
+        /* The part this band writes (its pixels without the overlap around them). */
+        int writes_game = x0 + ov < cw && y0 + ov < ch && x0 + width - ov > 0 && y0 + height - ov > 0;
+        return writes_game ? 11 /* PhotoCraft cut the canvas in a way this plug-in can't play on */ : 0;
+    }
 
     char value[48];
     json_string(params, plen, "move", value, sizeof value);
@@ -232,6 +246,8 @@ EXPORT(pc_filter) int pc_filter(float *buf, int buf_len, int width, int height, 
         long cy = y0 + by;
         for (int bx = 0; bx < width; bx++) {
             long cx = x0 + bx;
+            if (cx >= cw || cy >= ch)
+                continue; /* outside the game's area: left as it is */
             float *px = buf + ((size_t)by * width + bx) * channels;
             uint32_t rgb = 0;
             long fx = cx - ox, fy = cy - oy;

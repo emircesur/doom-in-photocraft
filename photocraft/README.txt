@@ -2,7 +2,8 @@ PLAY DOOM IN PHOTOCRAFT
 
 Doom (Freedoom: Phase 1, episode 1) played on a PhotoCraft canvas, one move per key press.
 
-1. File > New: 640 x 400 pixels, RGB (320 x 200 works too; at most 1024 x 512).
+1. File > New: 640 x 400 pixels, RGB. On a larger document the game takes its top-left
+   640 x 400 and leaves the rest alone.
 2. Window > Actions: double-click "Doom: Forward" (or any Doom move). The first one starts a game.
    PhotoCraft versions that bind keys to actions (after 0.5.0) play them with the keys below.
 3. Edit > Undo takes a move back.
